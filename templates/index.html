@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Website Detector</title>
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3064/3064197.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 50px;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .result-card {
+            display: none;
+            margin-top: 20px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .feature-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .phishing {
+            color: #dc3545;
+        }
+        .safe {
+            color: #198754;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card p-4">
+            <h1 class="text-center mb-4">
+                <i class="fas fa-shield-alt"></i>
+                Phishing Website Detector
+            </h1>
+            
+            <div class="mb-3">
+                <label for="urlInput" class="form-label">Enter URL to analyze:</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="urlInput" placeholder="https://example.com">
+                    <button class="btn btn-primary" onclick="analyzeUrl()">
+                        <i class="fas fa-search"></i> Analyze
+                    </button>
+                </div>
+            </div>
+
+            <div class="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Analyzing URL...</p>
+            </div>
+
+            <div id="errorAlert" class="alert alert-danger alert-dismissible fade show" role="alert" style="display:none;">
+                <span id="errorMsg"></span>
+                <button type="button" class="btn-close" aria-label="Close" onclick="dismissError()"></button>
+            </div>
+
+            <div class="result-card card">
+                <div class="card-body">
+                    <h5 class="card-title result-title"></h5>
+                    <p class="card-text result-description"></p>
+                    
+                    <div class="mt-4">
+                        <h6>Analysis Details:</h6>
+                        <div class="feature-list">
+                            <table class="table table-sm">
+                                <tbody id="featureTable">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showError(message) {
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.textContent = message;
+            errorAlert.style.display = 'block';
+        }
+        function dismissError() {
+            document.getElementById('errorAlert').style.display = 'none';
+        }
+
+        async function analyzeUrl() {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value.trim();
+            dismissError();
+            if (!url) {
+                showError('Please enter a URL to analyze');
+                return;
+            }
+
+            // Show loading
+            document.querySelector('.loading').style.display = 'block';
+            document.querySelector('.result-card').style.display = 'none';
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url }),
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayResult(result);
+                } else {
+                    showError(result.error || 'Analysis failed');
+                }
+            } catch (error) {
+                showError('Error: ' + error.message);
+            } finally {
+                document.querySelector('.loading').style.display = 'none';
+            }
+        }
+
+        function displayResult(result) {
+            const resultCard = document.querySelector('.result-card');
+            const resultTitle = document.querySelector('.result-title');
+            const resultDescription = document.querySelector('.result-description');
+            const featureTable = document.getElementById('featureTable');
+
+            // Update result card
+            resultCard.style.display = 'block';
+            
+            if (result.is_phishing) {
+                resultTitle.innerHTML = '<i class="fas fa-exclamation-triangle phishing"></i> Phishing Website Detected!';
+                resultDescription.innerHTML = `This website has a ${(result.probability * 100).toFixed(1)}% probability of being a phishing site.`;
+            } else if (result.is_safe) {
+                resultTitle.innerHTML = '<i class="fas fa-check-circle safe"></i> Safe Website';
+                resultDescription.innerHTML = `This website appears to be legitimate with a ${(result.confidence * 100).toFixed(1)}% confidence.`;
+            } else {
+                resultTitle.innerHTML = '<i class="fas fa-exclamation-circle text-warning"></i> Caution: Low Confidence';
+                resultDescription.innerHTML = `This website is not detected as phishing, but confidence is only ${(result.confidence * 100).toFixed(1)}%. Please proceed with caution.`;
+            }
+
+            // Update features table
+            featureTable.innerHTML = '';
+            for (const [feature, value] of Object.entries(result.features)) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatFeatureName(feature)}</td>
+                    <td>${formatFeatureValue(value)}</td>
+                `;
+                featureTable.appendChild(row);
+            }
+        }
+
+        function formatFeatureName(feature) {
+            return feature
+                .replace(/_/g, ' ')
+                .split(' ')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+        }
+
+        function formatFeatureValue(value) {
+            if (typeof value === 'boolean') {
+                return value ? 'Yes' : 'No';
+            }
+            if (typeof value === 'number') {
+                return value.toFixed(2);
+            }
+            return value;
+        }
+
+        // Allow Enter key to trigger analysis
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                analyzeUrl();
+            }
+        });
+    </script>
+</body>
+</html> 
